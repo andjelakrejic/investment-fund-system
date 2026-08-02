@@ -1,0 +1,503 @@
+IEP PROJEKAT – POKRETANJE 
+
+1. OTVARANJE PROJEKTA I PROVERA SADRŽAJA
+
+U PyCharm terminalu otvori root folder projekta, odnosno folder u kome se nalazi compose.yaml.
+
+Provera sadržaja sa dir:
+compose.yaml
+authentication\
+employee\
+director\
+kubernetes\
+
+2. PREUZIMANJE IMAGE-A DOK POSTOJI INTERNET
+
+docker pull python:3.13
+docker pull mysql:8.4
+docker pull mongo:8
+docker pull redis:7
+docker pull trufflesuite/ganache-cli:latest
+
+3. BUILD SVA TRI APLIKACIONA SERVISA
+
+Iz root foldera projekta:
+
+docker compose -p projekat -f .\compose.yaml build
+
+Provera napravljenih image-a:
+
+docker images
+
+Treba da postoje:
+
+projekat-authentication-service:latest
+projekat-employee-service:latest
+projekat-director-service:latest
+mysql:8.4
+mongo:8
+redis:7
+trufflesuite/ganache-cli:latest
+
+
+4. PROVERA KUBERNETES RUNTIME-A
+Proveri da li kubectl vidi klaster:
+
+kubectl cluster-info
+kubectl get nodes -o wide
+
+Proveri koji container runtime koristi Kubernetes:
+
+kubectl get nodes -o jsonpath="{.items[0].status.nodeInfo.containerRuntimeVersion}"
+
+Ako rezultat počinje sa:
+
+containerd://
+
+Kubernetes koristi containerd.
+
+VAŽNO:
+Docker image-i i kubeadm/containerd image-i ne moraju da budu u istom skladistu.
+Na Windows-u se ne pokreće automatski:
+
+sudo ctr ...
+
+u običnom PowerShell terminalu.
+
+Način importovanja image-a u containerd zavisi od toga kako je računar na odbrani podesen:
+- možda Kubernetes već vidi lokalne Docker image-e;
+- možda postoji unapred pripremljena komanda ili skripta;
+- možda se containerd nalazi u virtuelnoj masini ili WSL-u;
+- možda asistenti daju pristup Kubernetes node-u.
+
+Zato prvo pokusaj normalno Kubernetes pokretanje iz narednih koraka.
+Ako se pojavi ErrImageNeverPull, pređi na odeljak 15.
+
+
+5. BRISANJE PRETHODNOG POKRETANJA
+
+kubectl delete namespace investment-fund --ignore-not-found=true --wait=true
+
+Sačekaj da se komanda zavrsi.
+
+
+6. KREIRANJE NAMESPACE-A
+kubectl apply -f .\kubernetes\namespace.yaml
+
+kubectl wait --for=jsonpath='{.status.phase}'=Active namespace/investment-fund --timeout=30s
+
+
+7. POKRETANJE CELOG SISTEMA
+
+kubectl apply -f .\kubernetes\
+
+
+
+8. PROVERA PODOVA
+
+kubectl get pods -n investment-fund -w
+
+Kada svi podovi budu 1/1 Running, pritisni Ctrl+C.
+
+Treba da postoje:
+
+authentication-database
+authentication-service
+investment-database
+order-storage
+blockchain
+director-service
+tri employee-service poda
+
+Dodatna provera:
+
+kubectl get deployments -n investment-fund
+kubectl get pods -n investment-fund
+kubectl get services -n investment-fund
+kubectl get pvc -n investment-fund
+
+
+9. PORT-FORWARD – OTVORITI ČETIRI TERMINALA
+
+NodePort vrednosti nisu potrebne za grader jer koristimo port-forward i localhost.
+
+kubectl port-forward -n investment-fund service/authentication-service 5000:5000
+kubectl port-forward -n investment-fund service/employee-service 5001:5001
+kubectl port-forward -n investment-fund service/director-service 5002:5002
+kubectl port-forward -n investment-fund service/blockchain 8545:8545
+
+Kada se prikazuje nesto poput:
+
+Forwarding from 127.0.0.1:5000 -> 5000
+
+port-forward je uspesno pokrenut.
+
+10. PRIPREMA GRADERA
+
+Otvori peti PyCharm terminal i uđi u folder iep_testovi:
+
+cd PUTANJA_DO\iep_testovi
+
+dir
+
+requirements-pytest.txt
+test_grader.py
+conftest.py
+
+
+PRVO POKRETANJE GRADERA
+
+Napravi virtualno okruženje:
+
+python -m venv .venv
+
+Ako PowerShell blokira aktivaciju, samo za trenutni terminal pokreni:
+
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+Aktiviraj okruženje:
+
+.\.venv\Scripts\Activate.ps1
+
+Ažuriraj pip:
+
+python -m pip install --upgrade pip
+
+Instaliraj zavisnosti:
+
+pip install -r .\requirements-pytest.txt
+
+Zbog ranijeg problema sa pkg_resources preporučeno je i:
+
+pip install setuptools==80.9.0
+
+Provera:
+
+pytest --version
+
+
+SVAKO SLEDEĆE OTVARANJE GRADER TERMINALA
+
+cd PUTANJA_DO\iep_testovi
+.\.venv\Scripts\Activate.ps1
+
+
+---------------------------------------
+11. KOMPLETAN TEST
+Pre prvog testiranja nakon potpuno čistog Kubernetes pokretanja nije potrebno ciscenje baza.
+
+Pokreni:
+
+pytest -q --type all `
+  --authentication-url http://127.0.0.1:5000 `
+  --jwt-secret development-secret-key-at-least-32-characters `
+  --roles-field role `
+  --employee-role employee `
+  --director-role director `
+  --with-authentication `
+  --employee-url http://127.0.0.1:5001 `
+  --director-url http://127.0.0.1:5002 `
+  --with-blockchain `
+  --provider-url http://127.0.0.1:8545 `
+  --grade-report-file grade_report.json
+
+Kompletan grader obuhvata:
+- Authentication
+- Level 0
+- Level 1
+- Level 2
+- Level 3
+- Blockchain varijantu testova
+
+Očekivani maksimalni zbir:
+
+authentication: 49
+level0: 27
+level1: 25
+level2: 29
+level3: 49
+TOTAL: 179
+
+Ukupno se očekuje 98 testova kada je sve pokrenuto sa --type all.
+
+12. POJEDINAČNI TIPOVI TESTOVA
+VAŽNO:
+Ne pokreću se obavezno sekvencijalno
+Ne pokreći level0, pa level1, pa level2 bez ciscenja izmedju, jer će podaci ostati u bazama.
+
+
+A) SAMO AUTHENTICATION
+
+pytest -q --type authentication `
+  --authentication-url http://127.0.0.1:5000 `
+  --jwt-secret development-secret-key-at-least-32-characters `
+  --roles-field role `
+  --employee-role employee `
+  --director-role director `
+  --grade-report-file authentication_report.json
+
+
+B) LEVEL 0
+
+pytest -q --type level0 `
+  --authentication-url http://127.0.0.1:5000 `
+  --jwt-secret development-secret-key-at-least-32-characters `
+  --roles-field role `
+  --employee-role employee `
+  --director-role director `
+  --with-authentication `
+  --employee-url http://127.0.0.1:5001 `
+  --grade-report-file level0_report.json
+
+
+C) LEVEL 1
+
+pytest -q --type level1 `
+  --authentication-url http://127.0.0.1:5000 `
+  --jwt-secret development-secret-key-at-least-32-characters `
+  --roles-field role `
+  --employee-role employee `
+  --director-role director `
+  --with-authentication `
+  --employee-url http://127.0.0.1:5001 `
+  --director-url http://127.0.0.1:5002 `
+  --with-blockchain `
+  --provider-url http://127.0.0.1:8545 `
+  --grade-report-file level1_report.json
+
+
+D) LEVEL 2
+
+pytest -q --type level2 `
+  --authentication-url http://127.0.0.1:5000 `
+  --jwt-secret development-secret-key-at-least-32-characters `
+  --roles-field role `
+  --employee-role employee `
+  --director-role director `
+  --with-authentication `
+  --employee-url http://127.0.0.1:5001 `
+  --director-url http://127.0.0.1:5002 `
+  --with-blockchain `
+  --provider-url http://127.0.0.1:8545 `
+  --grade-report-file level2_report.json
+
+
+E) LEVEL 3
+
+pytest -q --type level3 `
+  --authentication-url http://127.0.0.1:5000 `
+  --jwt-secret development-secret-key-at-least-32-characters `
+  --roles-field role `
+  --employee-role employee `
+  --director-role director `
+  --with-authentication `
+  --employee-url http://127.0.0.1:5001 `
+  --director-url http://127.0.0.1:5002 `
+  --with-blockchain `
+  --provider-url http://127.0.0.1:8545 `
+  --grade-report-file level3_report.json
+
+---------------------------------------------
+13. PONOVNO POKRETANJE TESTOVA – BRZI RESET
+
+Grader testovi ostavljaju podatke u MySQL-u, MongoDB-u i Redis-u.
+Pre ponovnog pokretanja testova očisti stanje.
+
+Očisti Redis:
+
+kubectl exec -n investment-fund deployment/order-storage -- redis-cli FLUSHALL
+
+Očisti MongoDB:
+
+kubectl exec -n investment-fund deployment/investment-database -- mongosh investment --eval "db.dropDatabase()"
+
+Preuzmi MySQL root lozinku:
+
+$MYSQL_PASSWORD = (kubectl exec -n investment-fund deployment/authentication-database -- printenv MYSQL_ROOT_PASSWORD).Trim()
+
+Obridi sve korisnike osim pocetnog direktora:
+
+kubectl exec -n investment-fund deployment/authentication-database -- mysql -uroot "-p$MYSQL_PASSWORD" -e "USE authentication; DELETE FROM user WHERE role != 'director';"
+
+Posle toga ponovo pokreni željenu pytest komandu.
+
+Ako Authentication servis nakon ciscenja MySQL-a prijavi privremenu grešku konekcije, restartuj ga:
+
+kubectl rollout restart deployment/authentication-service -n investment-fund
+kubectl rollout status deployment/authentication-service -n investment-fund --timeout=120s
+
+Posle restartovanja ponovo pokreni Authentication port-forward terminal ako se prekinuo.
+
+
+------------------------
+14. POTPUNO ČIST RESET
+
+Za najsigurniju zavrsnu proveru obrisi ceo namespace:
+
+kubectl delete namespace investment-fund --ignore-not-found=true --wait=true
+
+kubectl apply -f .\kubernetes\namespace.yaml
+
+kubectl wait --for=jsonpath='{.status.phase}'=Active namespace/investment-fund --timeout=30s
+
+kubectl apply -f .\kubernetes\
+
+kubectl get pods -n investment-fund -w
+
+VAŽNO:
+Posle potpunog resetovanja namespace-a sva četiri postojeća port-forward terminala prestaju da važe.
+Ponovo pokreni sva četiri port-forward-a iz odeljka 9.
+
+
+------------------------------------
+15. AKO SE POJAVI ErrImageNeverPull
+ErrImageNeverPull znaci da Kubernetes containerd ne vidi lokalni image, a u YAML-u je imagePullPolicy podesen na Never.
+
+Najpre proveri koji image nedostaje:
+
+kubectl get pods -n investment-fund
+kubectl describe pod -n investment-fund IME_PODA
+
+Na Windows-u napravi tar fajl PowerShell komandom:
+
+docker save -o .\iep-images.tar `
+  projekat-authentication-service:latest `
+  projekat-employee-service:latest `
+  projekat-director-service:latest `
+  mysql:8.4 `
+  mongo:8 `
+  redis:7 `
+  trufflesuite/ganache-cli:latest
+
+Proveri da fajl postoji:
+
+dir .\iep-images.tar
+
+IMPORT U CONTAINERD
+
+Import mora da se izvrsi u containerd runtime-u Kubernetes node-a.
+Tačna komanda zavisi od okruženja na odbrani.
+
+Ako vam asistenti daju Linux/WSL/VM terminal direktno na node-u, komanda može biti:
+
+sudo ctr -n k8s.io images import iep-images.tar
+
+Ako vam daju neku drugu komandu ili skriptu za import, koristi njihovo uputstvo.
+
+Posle uspesnog importa proveri image-e u containerd-u, ako je ctr dostupan:
+
+sudo ctr -n k8s.io images list
+
+Zatim obrisi neuspesne podove ili restartuj deployment-e:
+
+kubectl delete pod -n investment-fund POD_KOJI_JE_U_GRESCI
+
+ili:
+
+kubectl rollout restart deployment/authentication-service -n investment-fund
+kubectl rollout restart deployment/employee-service -n investment-fund
+kubectl rollout restart deployment/director-service -n investment-fund
+
+Windows PowerShell brisanje lokalnog tar fajla:
+
+Remove-Item .\iep-images.tar
+
+NAPOMENA:
+Nemoj unapred računati da će sudo ctr raditi u običnom Windows PowerShell-u.
+To je komanda za okruženje u kome je dostupan Kubernetes containerd.
+
+
+----------------------------------
+16. AKO NEKI POD NIJE RUNNING
+
+Prikaz stanja:
+
+kubectl get pods -n investment-fund
+
+Detalji konkretnog poda:
+
+kubectl describe pod -n investment-fund IME_PODA
+
+Log konkretnog poda:
+
+kubectl logs -n investment-fund IME_PODA
+
+Ako se pod restartovao:
+
+kubectl logs -n investment-fund IME_PODA --previous
+
+Praćenje rollout-a deployment-a:
+
+kubectl rollout status deployment/IME_DEPLOYMENTA -n investment-fund --timeout=120s
+
+Prikaz događaja:
+
+kubectl get events -n investment-fund --sort-by=.metadata.creationTimestamp
+
+------------------------------
+17. BRZE PROVERE PRE GRADERA
+
+
+Provera svih podova:
+
+kubectl get pods -n investment-fund
+
+Provera servisa:
+
+kubectl get services -n investment-fund
+
+Provera PVC-ova:
+
+kubectl get pvc -n investment-fund
+
+Provera tri Employee replike:
+
+kubectl get deployment employee-service -n investment-fund
+
+
+Provera dostupnosti port-forward-a iz novog terminala:
+
+Invoke-WebRequest http://127.0.0.1:5000 -UseBasicParsing
+
+Napomena:
+Početna ruta može vratiti 404 i to ne mora da znači da servis ne radi.
+Bitno je da nema greske tipa "connection refused".
+
+
+----------------------------------
+18. NAJKRAĆI REDOSLED
+
+1. Uđi u root folder projekta.
+
+2. Dok postoji internet:
+
+docker pull python:3.13
+docker pull mysql:8.4
+docker pull mongo:8
+docker pull redis:7
+docker pull trufflesuite/ganache-cli:latest
+
+3. Build:
+
+docker compose -p projekat -f .\compose.yaml build
+
+4. Potpuno čisto Kubernetes pokretanje:
+
+kubectl delete namespace investment-fund --ignore-not-found=true --wait=true
+kubectl apply -f .\kubernetes\namespace.yaml
+kubectl wait --for=jsonpath='{.status.phase}'=Active namespace/investment-fund --timeout=30s
+kubectl apply -f .\kubernetes\
+kubectl get pods -n investment-fund -w
+
+5. Ako se pojavi ErrImageNeverPull, prati odeljak 15.
+
+6. Otvori četiri terminala i pokreni sva četiri port-forward-a.
+
+7. U petom terminalu uđi u iep_testovi, aktiviraj .venv i pokreni --type all.
+
+8. Na kraju pokaži:
+
+kubectl get pods -n investment-fund
+kubectl get services -n investment-fund
+kubectl get pvc -n investment-fund
+

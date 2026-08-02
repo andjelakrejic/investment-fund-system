@@ -1,10 +1,7 @@
 import json
 from functools import wraps
 from pymongo import MongoClient
-from datetime import datetime, timezone
 from uuid import UUID
-
-from bson import ObjectId
 
 from flask import Blueprint, jsonify, current_app, request
 from flask_jwt_extended import jwt_required, get_jwt
@@ -249,8 +246,8 @@ def decision():
         )
     )
 
-    # Zahtev još ne brišemo.
-    # Čuvamo podatke o njegovom ugovoru u Redis-u.
+    # Zahtev jos ne brisemo
+    # Cuvamo podatke o njegovom ugovoru u Redis-u
     redis_client.hset(
         f"voting:{order_uuid}",
         mapping={
@@ -263,4 +260,46 @@ def decision():
     return jsonify({
         "approve_transaction": approve_transaction,
         "reject_transaction": reject_transaction
+    }), 200
+
+
+@director_blueprint.route(
+    "/assets-by-category",
+    methods=["GET"]
+)
+@director_required
+def assets_by_category():
+    assets = get_assets_collection()
+
+    pipeline = [
+        {
+            "$unwind": "$categories"
+        },
+        {
+            "$group": {
+                "_id": "$categories",
+                "count": {
+                    "$sum": 1
+                }
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "category": "$_id",
+                "count": 1
+            }
+        },
+        {
+            "$sort": {
+                "count": -1,
+                "category": 1
+            }
+        }
+    ]
+
+    statistics = list(assets.aggregate(pipeline))
+
+    return jsonify({
+        "statistics": statistics
     }), 200
