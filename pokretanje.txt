@@ -1,4 +1,15 @@
-IEP PROJEKAT – POKRETANJE 
+IEP PROJEKAT – POKRETANJE
+
+ako promenis nor director.py:
+
+docker compose -p projekat -f .\compose.yaml build director-service
+kubectl rollout restart deployment/director-service -n investment-fund
+kubectl rollout status deployment/director-service -n investment-fund --timeout=120s
+
+ponovo pokreni:
+kubectl port-forward -n investment-fund service/authentication-service 5000:5000
+kubectl port-forward -n investment-fund service/employee-service 5001:5001
+kubectl port-forward -n investment-fund service/director-service 5002:5002 
 
 1. OTVARANJE PROJEKTA I PROVERA SADRŽAJA
 
@@ -11,7 +22,7 @@ employee\
 director\
 kubernetes\
 
-2. PREUZIMANJE IMAGE-A DOK POSTOJI INTERNET
+2. Ako nema gresaka posle builda - ako ima idi na 4.
 
 docker pull python:3.13
 docker pull mysql:8.4
@@ -19,15 +30,23 @@ docker pull mongo:8
 docker pull redis:7
 docker pull trufflesuite/ganache-cli:latest
 
-3. BUILD SVA TRI APLIKACIONA SERVISA
-
-Iz root foldera projekta:
-
 docker compose -p projekat -f .\compose.yaml build
 
-Provera napravljenih image-a:
+(da se lokalno sacuva)
+docker save -o .\iep-images.tar `
+  projekat-authentication-service:latest `
+  projekat-employee-service:latest `
+  projekat-director-service:latest `
+  mysql:8.4 `
+  mongo:8 `
+  redis:7 `
+  trufflesuite/ganache-cli:latest
 
-docker images
+kubectl delete namespace investment-fund --ignore-not-found=true --wait=true
+kubectl apply -f .\kubernetes\namespace.yaml
+kubectl wait --for=jsonpath='{.status.phase}'=Active namespace/investment-fund --timeout=30s
+kubectl apply -f .\kubernetes\docker images
+kubectl get pods -n investment-fund -w
 
 Treba da postoje:
 
@@ -57,28 +76,26 @@ containerd://
 Kubernetes koristi containerd.
 
 VAŽNO:
-Docker image-i i kubeadm/containerd image-i ne moraju da budu u istom skladistu.
+Docker image-i i kubeadm/containerd image-i ne moraju da budu u istom skladištu.
 Na Windows-u se ne pokreće automatski:
 
 sudo ctr ...
 
 u običnom PowerShell terminalu.
 
-Način importovanja image-a u containerd zavisi od toga kako je računar na odbrani podesen:
+Način importovanja image-a u containerd zavisi od toga kako je računar na odbrani podešen:
 - možda Kubernetes već vidi lokalne Docker image-e;
 - možda postoji unapred pripremljena komanda ili skripta;
-- možda se containerd nalazi u virtuelnoj masini ili WSL-u;
+- možda se containerd nalazi u virtuelnoj mašini ili WSL-u;
 - možda asistenti daju pristup Kubernetes node-u.
 
-Zato prvo pokusaj normalno Kubernetes pokretanje iz narednih koraka.
+Zato prvo pokušaj normalno Kubernetes pokretanje iz narednih koraka.
 Ako se pojavi ErrImageNeverPull, pređi na odeljak 15.
 
 
-5. BRISANJE PRETHODNOG POKRETANJA
+5. BRISANJE PRETHODNOG POKRETANJA (sacekaj da se izvrsi)
 
 kubectl delete namespace investment-fund --ignore-not-found=true --wait=true
-
-Sačekaj da se komanda zavrsi.
 
 
 6. KREIRANJE NAMESPACE-A
@@ -126,11 +143,11 @@ kubectl port-forward -n investment-fund service/employee-service 5001:5001
 kubectl port-forward -n investment-fund service/director-service 5002:5002
 kubectl port-forward -n investment-fund service/blockchain 8545:8545
 
-Kada se prikazuje nesto poput:
+Kada se prikazuje nešto poput:
 
 Forwarding from 127.0.0.1:5000 -> 5000
 
-port-forward je uspesno pokrenut.
+port-forward je uspešno pokrenut.
 
 10. PRIPREMA GRADERA
 
@@ -184,7 +201,7 @@ cd PUTANJA_DO\iep_testovi
 
 ---------------------------------------
 11. KOMPLETAN TEST
-Pre prvog testiranja nakon potpuno čistog Kubernetes pokretanja nije potrebno ciscenje baza.
+Pre prvog testiranja nakon potpuno čistog Kubernetes pokretanja nije potrebno čišćenje baza.
 
 Pokreni:
 
@@ -223,7 +240,7 @@ Ukupno se očekuje 98 testova kada je sve pokrenuto sa --type all.
 12. POJEDINAČNI TIPOVI TESTOVA
 VAŽNO:
 Ne pokreću se obavezno sekvencijalno
-Ne pokreći level0, pa level1, pa level2 bez ciscenja izmedju, jer će podaci ostati u bazama.
+Ne pokreći level0, pa level1, pa level2 bez čišćenja između, jer će podaci ostati u bazama.
 
 
 A) SAMO AUTHENTICATION
@@ -315,13 +332,13 @@ Preuzmi MySQL root lozinku:
 
 $MYSQL_PASSWORD = (kubectl exec -n investment-fund deployment/authentication-database -- printenv MYSQL_ROOT_PASSWORD).Trim()
 
-Obridi sve korisnike osim pocetnog direktora:
+Obriši sve korisnike osim početnog direktora:
 
 kubectl exec -n investment-fund deployment/authentication-database -- mysql -uroot "-p$MYSQL_PASSWORD" -e "USE authentication; DELETE FROM user WHERE role != 'director';"
 
 Posle toga ponovo pokreni željenu pytest komandu.
 
-Ako Authentication servis nakon ciscenja MySQL-a prijavi privremenu grešku konekcije, restartuj ga:
+Ako Authentication servis nakon čišćenja MySQL-a prijavi privremenu grešku konekcije, restartuj ga:
 
 kubectl rollout restart deployment/authentication-service -n investment-fund
 kubectl rollout status deployment/authentication-service -n investment-fund --timeout=120s
@@ -332,7 +349,7 @@ Posle restartovanja ponovo pokreni Authentication port-forward terminal ako se p
 ------------------------
 14. POTPUNO ČIST RESET
 
-Za najsigurniju zavrsnu proveru obrisi ceo namespace:
+Za najsigurniju završnu proveru obriši ceo namespace:
 
 kubectl delete namespace investment-fund --ignore-not-found=true --wait=true
 
@@ -351,7 +368,7 @@ Ponovo pokreni sva četiri port-forward-a iz odeljka 9.
 
 ------------------------------------
 15. AKO SE POJAVI ErrImageNeverPull
-ErrImageNeverPull znaci da Kubernetes containerd ne vidi lokalni image, a u YAML-u je imagePullPolicy podesen na Never.
+ErrImageNeverPull znači da Kubernetes containerd ne vidi lokalni image, a u YAML-u je imagePullPolicy podešen na Never.
 
 Najpre proveri koji image nedostaje:
 
@@ -375,7 +392,7 @@ dir .\iep-images.tar
 
 IMPORT U CONTAINERD
 
-Import mora da se izvrsi u containerd runtime-u Kubernetes node-a.
+Import mora da se izvrši u containerd runtime-u Kubernetes node-a.
 Tačna komanda zavisi od okruženja na odbrani.
 
 Ako vam asistenti daju Linux/WSL/VM terminal direktno na node-u, komanda može biti:
@@ -384,13 +401,13 @@ sudo ctr -n k8s.io images import iep-images.tar
 
 Ako vam daju neku drugu komandu ili skriptu za import, koristi njihovo uputstvo.
 
-Posle uspesnog importa proveri image-e u containerd-u, ako je ctr dostupan:
+Posle uspešnog importa proveri image-e u containerd-u, ako je ctr dostupan:
 
 sudo ctr -n k8s.io images list
 
-Zatim obrisi neuspesne podove ili restartuj deployment-e:
+Zatim obriši neuspešne podove ili restartuj deployment-e:
 
-kubectl delete pod -n investment-fund POD_KOJI_JE_U_GRESCI
+kubectl delete pod -n investment-fund POD_KOJI_JE_U_GREŠCI
 
 ili:
 
@@ -433,7 +450,7 @@ kubectl rollout status deployment/IME_DEPLOYMENTA -n investment-fund --timeout=1
 Prikaz događaja:
 
 kubectl get events -n investment-fund --sort-by=.metadata.creationTimestamp
-
+	
 ------------------------------
 17. BRZE PROVERE PRE GRADERA
 
@@ -461,7 +478,7 @@ Invoke-WebRequest http://127.0.0.1:5000 -UseBasicParsing
 
 Napomena:
 Početna ruta može vratiti 404 i to ne mora da znači da servis ne radi.
-Bitno je da nema greske tipa "connection refused".
+Bitno je da nema greške tipa "connection refused".
 
 
 ----------------------------------
