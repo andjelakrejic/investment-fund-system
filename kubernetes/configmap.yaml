@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: investment-fund-config
+  namespace: investment-fund
+data:
+  MYSQL_HOST: authentication-database
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: authentication
+
+  MONGO_HOST: investment-database
+  MONGO_PORT: "27017"
+  MONGO_DATABASE: investment
+  MONGO_URI: mongodb://investment-database:27017/investment
+
+  REDIS_HOST: order-storage
+  REDIS_PORT: "6379"
+
+  BLOCKCHAIN_URL: http://blockchain:8545

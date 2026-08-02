@@ -1,0 +1,101 @@
+services:
+  authentication-database:
+    image: mysql:8.4
+    container_name: authentication-database
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: authentication
+      MYSQL_USER: authentication_user
+      MYSQL_PASSWORD: authentication_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - authentication-database-data:/var/lib/mysql
+
+  investment-database:
+    image: mongo:8
+    container_name: investment-database
+    ports:
+      - "27017:27017"
+    volumes:
+      - investment-database-data:/data/db
+
+  order-storage:
+    image: redis:7
+    container_name: order-storage
+    ports:
+      - "6379:6379"
+    volumes:
+      - order-storage-data:/data
+
+  blockchain:
+    image: trufflesuite/ganache-cli
+    container_name: blockchain
+    command:
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8545"
+      - "--accounts"
+      - "10"
+      - "--defaultBalanceEther"
+      - "1000"
+      - "--deterministic"
+    ports:
+      - "8545:8545"
+
+  authentication-service:
+    build:
+      context: .
+      dockerfile: authentication/Dockerfile
+    container_name: authentication-service
+    environment:
+      DATABASE_URL: mysql+pymysql://authentication_user:authentication_password@authentication-database:3306/authentication
+      JWT_SECRET_KEY: development-secret-key
+    ports:
+      - "5000:5000"
+    depends_on:
+      - authentication-database
+
+  employee-service:
+    build:
+      context: .
+      dockerfile: employee/Dockerfile
+    container_name: employee-service
+    environment:
+      JWT_SECRET_KEY: development-secret-key
+      MONGO_URI: mongodb://investment-database:27017/
+      MONGO_DATABASE: investment
+      REDIS_HOST: order-storage
+      REDIS_PORT: 6379
+    ports:
+      - "5001:5001"
+    depends_on:
+      - investment-database
+      - order-storage
+
+  director-service:
+    build:
+      context: .
+      dockerfile: director/Dockerfile
+    container_name: director-service
+    environment:
+      JWT_SECRET_KEY: development-secret-key
+      MONGO_URI: mongodb://investment-database:27017/
+      MONGO_DATABASE: investment
+      REDIS_HOST: order-storage
+      REDIS_PORT: 6379
+      BLOCKCHAIN_URL: http://blockchain:8545
+    ports:
+      - "5002:5002"
+    depends_on:
+      - investment-database
+      - order-storage
+      - blockchain
+
+
+
+volumes:
+  authentication-database-data:
+  investment-database-data:
+  order-storage-data:

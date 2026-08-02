@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: order-storage-pvc
+  namespace: investment-fund
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 512Mi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-storage
+  namespace: investment-fund
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-storage
+  template:
+    metadata:
+      labels:
+        app: order-storage
+    spec:
+      containers:
+        - name: order-storage
+          image: redis:7
+          ports:
+            - containerPort: 6379
+
+          command:
+            - redis-server
+            - --appendonly
+            - "yes"
+
+          volumeMounts:
+            - name: order-storage-data
+              mountPath: /data
+
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 10
+
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 5
+
+      volumes:
+        - name: order-storage-data
+          persistentVolumeClaim:
+            claimName: order-storage-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-storage
+  namespace: investment-fund
+spec:
+  selector:
+    app: order-storage
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379
+  type: ClusterIP
