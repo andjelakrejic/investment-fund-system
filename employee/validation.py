@@ -12,6 +12,6 @@ def missing_field(body, field):
 def is_valid_positive_number(value):
     return (
         isinstance(value, (int, float))
-        and not isinstance(value, bool)
+        and not isinstance(value, bool) # jer je u pythonu bool podtip inta
         and value > 0
     )

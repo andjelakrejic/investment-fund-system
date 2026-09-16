@@ -29,7 +29,6 @@ spec:
       containers:
         - name: order-storage
           image: redis:7
-          imagePullPolicy: Never
           ports:
             - containerPort: 6379
 

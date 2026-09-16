@@ -12,10 +12,7 @@ app.config.from_object(Configuration)
 
 database.init_app(app)
 jwt = JWTManager(app)
-
-app.register_blueprint(authentication_blueprint)
-
-
+app.register_blueprint(authentication_blueprint) # nacin da Flask rute organizujes u odvojen modul - /register, /login /delete su odvojeni ali onda ubaceni u glavnu Flask apl
 @app.route("/")
 def index():
     return "Authentication service works."

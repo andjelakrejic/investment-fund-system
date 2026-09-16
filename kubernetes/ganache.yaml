@@ -16,11 +16,8 @@ spec:
       containers:
         - name: blockchain
           image: trufflesuite/ganache-cli:latest
-          imagePullPolicy: Never
-
           ports:
             - containerPort: 8545
-
           args:
             - --host
             - "0.0.0.0"

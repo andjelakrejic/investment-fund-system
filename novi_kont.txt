@@ -1,0 +1,176 @@
+DODAVANJE public-service U POSTOJECI PROJEKAT
+
+Preduslov: vec postoje sledeci fajlovi (napravljeni ranije):
+- public/application.py
+- public/configuration.py
+- public/routes/__init__.py
+- public/routes/public.py
+- public/Dockerfile
+- public.yaml (u kubernetes/ folderu, pored employee.yaml, director.yaml...)
+- compose.yaml dopunjen sa servisom public-service
+
+-- ! PAZI da dodas i u compose.yaml i u public.yaml za REDIS i MONGO u zavisnosti od toga sta koristis !--
+-- Ako menjas SAMO .yaml (env, probe, itd.) bez izmene koda: --
+kubectl apply -f .\kubernetes\public.yaml
+kubectl rollout status deployment/public-service -n investment-fund
+kubectl get pods -n investment-fund -l app=public-service
+
+-- Ako menjas KOD (application.py, public_worker.py, itd.): --
+docker compose -p projekat -f .\compose.yaml build public-service
+kubectl apply -f .\kubernetes\public.yaml
+kubectl rollout restart deployment/public-service -n investment-fund
+kubectl rollout status deployment/public-service -n investment-fund
+kubectl get pods -n investment-fund -l app=public-service
+
+
+
+1. BUILD IMAGE-A (DOCKER COMPOSE)
+
+Iz root-a projekta:
+
+docker compose -p projekat -f .\compose.yaml build public-service
+
+Provera da je image nastao:
+docker images
+
+Treba da se pojavi:
+projekat-public-service:latest
+
+!!!AKO TRAZI ISPIS - KOMANDA ZA PROVERU LOGOVA IZ TERMINALA (u dockerfilu je dodato -u):
+
+kubectl logs -f IME_PODA -n investment-fund
+
+2. (OPCIONO) TEST PREKO DOCKER COMPOSE, BEZ KUBERNETES-A - NEMOJ OVAKO
+
+Ako zelis prvo da probas van K8s:
+
+docker compose -p projekat -f .\compose.yaml up -d public-service
+
+Provera da radi:
+
+curl http://127.0.0.1:5003/
+
+Kad zavrsis test:
+
+docker compose -p projekat -f .\compose.yaml down public-service
+
+
+3. DODAVANJE public.yaml U KUBERNETES
+
+Ako klaster vec radi (namespace investment-fund postoji), ne mora se sve rusiti,
+dovoljno je primeniti novi yaml:
+
+kubectl apply -f .\kubernetes\public.yaml
+
+Provera da je pod kreiran:
+
+kubectl get pods -n investment-fund
+
+Treba da se pojavi novi pod, npr:
+
+public-service-xxxxxxxxxx-xxxxx
+
+Sacekaj da bude 1/1 Running:
+
+kubectl get pods -n investment-fund -w
+
+Kada je Running, Ctrl+C.
+
+
+4. PROVERA DA JE POD DOBIO ISPRAVAN IMAGE
+
+kubectl describe pod -n investment-fund IME_PUBLIC_PODA
+
+Proveri polje Image: mora da bude projekat-public-service:latest
+i da Image Pull Policy bude IfNotPresent (ako je image lokalan, mora biti build-ovan PRE apply-a,
+inace ce pod otici u ErrImageNeverPull, videti sekciju 13 u glavnom uputstvu).
+
+
+5. LOG I DEBUG (AKO NESTO NE RADI)
+
+kubectl logs -n investment-fund deployment/public-service
+
+Detalji pod-a:
+
+kubectl describe pod -n investment-fund IME_PUBLIC_PODA
+
+Prethodni container (ako se restartovao):
+
+kubectl logs -n investment-fund IME_PUBLIC_PODA --previous
+
+
+6. PORT-FORWARD (DODATNI, PETI TERMINAL)
+
+Ako zelis rucno da testiras public-service preko browsera/Postman-a,
+otvori novi terminal (uz postojeca cetiri za authentication/employee/director/blockchain):
+
+kubectl port-forward -n investment-fund service/public-service 5003:5003
+
+Od sada:
+
+public -> http://127.0.0.1:5003
+
+Test:
+
+curl http://127.0.0.1:5003/
+
+curl -X POST http://127.0.0.1:5003/search `
+  -H "Content-Type: application/json" `
+  -d '{\"min_price\": 100, \"max_price\": 500}'
+
+!! Ako ima negde greska i nece da se desi rollout status!!
+ kubectl logs public-service-6d455d4478-fnml9 -n investment-fund
+
+7. AKO KASNIJE MENJAS KOD public-service
+
+Rebuild:
+
+docker compose -p projekat -f .\compose.yaml build public-service
+
+Restart deploymenta da pokupi novi image:
+
+kubectl rollout restart deployment/public-service -n investment-fund
+kubectl rollout status deployment/public-service -n investment-fund --timeout=120s
+
+Ako i dalje vidis stari kod (npr. proveri grep-om konkretnu liniju u fajlu unutar poda):
+
+kubectl exec -n investment-fund deployment/public-service -- grep -n "min_price" /app/public/routes/public.py
+
+Ako ne vidi novi kod, obrisi pod rucno pa ce Kubernetes napraviti novi:
+
+kubectl get pods -n investment-fund
+kubectl delete pod -n investment-fund public-service-6cd465b4cd-5lbhl
+
+
+8. AKO SE SVE RUSI OD NULE (pun restart klastera)
+
+Ovo vec radis za ceo projekat (namespace delete + apply .\kubernetes\), public.yaml
+ce se pokupiti automatski jer se nalazi u istom kubernetes/ folderu:
+
+kubectl delete namespace investment-fund --ignore-not-found=true --wait=true
+kubectl apply -f .\kubernetes\namespace.yaml
+kubectl wait --for=jsonpath='{.status.phase}'=Active namespace/investment-fund --timeout=30s
+kubectl apply -f .\kubernetes\
+kubectl get pods -n investment-fund -w
+
+Ne zaboravi da posle ovoga MORAS ponovo pokrenuti SVIH PET port-forward terminala
+(authentication, employee, director, blockchain, public).
+
+
+9. NAPOMENA ZA GRADER
+
+Grader komanda iz glavnog uputstva (--type all ...) ne zna za public-service jer nije
+deo zvanicnog grading API-ja - on postoji samo za tvoju modifikaciju/odbranu.
+Ako profesor na odbrani trazi da pokazes upravo taj deo, radis ga rucno (curl/Postman),
+van pytest komande.
+
+
+10. Vracanje na verziju bez public
+
+docker compose -p projekat -f .\compose.yaml stop public-service
+docker compose -p projekat -f .\compose.yaml rm -f public-service
+kubectl delete -f .\kubernetes\public.yaml
+kubectl get pods -n investment-fund
+
+Iz Kubernetes foldera izbacis public.yaml
+Iz compose.yaml zakomentarises deo za public service

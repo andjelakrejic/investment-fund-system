@@ -18,6 +18,7 @@ authentication_blueprint = Blueprint(
     __name__
 )
 
+# Korisnik ne moze sam da se registruje kao Director - ne ubacuje podatak o role-u u formi!
 @authentication_blueprint.route("/register", methods=["POST"])
 def register():
     body = request.get_json(silent=True)
@@ -32,6 +33,7 @@ def register():
         "password"
     ]
 
+    # Provera obaveznih polja
     for field in required_fields:
         if field not in body or not isinstance(body[field], str) or len(body[field]) == 0:
             return jsonify({
@@ -100,7 +102,7 @@ def login():
             "message": "Invalid email."
         }), 400
 
-    user = User.query.filter_by(email=email).first()
+    user = User.query.filter_by(email=email).first() # trazi se korisnik u bazi po emailu
 
     if user is None or not check_password_hash(user.password, password):
         return jsonify({
@@ -114,6 +116,7 @@ def login():
         "role": user.role
     }
 
+    # kreira se jwt token na osnovu emaila koji traje 1h
     access_token = create_access_token(
         identity=user.email,
         additional_claims=additional_claims,

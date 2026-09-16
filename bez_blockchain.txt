@@ -1,0 +1,136 @@
+PREBACIVANJE NA NO-BLOCKCHAIN VERZIJU I NAZAD
+
+1. PRIPREMA (URADI UNAPRED, DOK IMAS INTERNET - NE NA ODBRANI)
+
+Proveri da folder postoji:
+
+Get-ChildItem .\director-no-blockchain
+
+Treba da vidis:
+- director-no-blockchain\Dockerfile
+- director-no-blockchain\director\application.py
+- director-no-blockchain\director\configuration.py
+- director-no-blockchain\director\routes\director.py
+
+Build no-blockchain image-a (iz root-a projekta):
+
+docker build -f .\director-no-blockchain\Dockerfile -t projekat-director-service-nb:latest .
+
+Provera:
+
+docker images
+
+Mora da postoji:
+
+projekat-director-service-nb   latest
+
+Ako radis rezervni .tar za odbranu (kao za ostale image-e), dodaj i ovaj:
+
+docker save -o .\iep-images-nb.tar projekat-director-service-nb:latest
+
+
+2. PREBACIVANJE NA NO-BLOCKCHAIN
+
+kubectl apply -f .\kubernetes\no-blockchain\director.yaml -n investment-fund
+kubectl rollout status deployment/director-service -n investment-fund --timeout=120s
+kubectl get pods -n investment-fund
+
+Ovo samo azurira postojeci director-service deployment na novi image
+(rolling update). Ne dira authentication, employee, mongo, redis, ganache.
+
+
+3. PROVERA DA JE NOVI (NO-BLOCKCHAIN) KOD STVARNO AKTIVAN
+
+kubectl exec -n investment-fund deployment/director-service -- ls /app/director
+
+NE SME da postoji blockchain.py ni voting_worker.py u listingu.
+Ako ih vidis, pod je i dalje na starom image-u - obrisi ga rucno:
+
+kubectl get pods -n investment-fund
+kubectl delete pod -n investment-fund IME_DIRECTOR_PODA
+
+Kubernetes ce napraviti novi pod sa novim image-om.
+
+Ako port-forward terminal za director-service (5002) ispuca posle rollout-a,
+samo ga ponovo pokreni:
+
+kubectl port-forward -n investment-fund service/director-service 5002:5002
+
+Ostala tri port-forward terminala (authentication, employee, blockchain)
+ne diras.
+
+
+4. CISCENJE BAZA PRE GRADER RUN-A
+
+Ako si vec ranije testirala blockchain verziju, ocisti podatke pre nego sto
+pokrenes grader na no-blockchain verziji (grader je stateful):
+
+kubectl exec -n investment-fund deployment/order-storage -- redis-cli FLUSHALL
+kubectl exec -n investment-fund deployment/investment-database -- mongosh investment --eval "db.dropDatabase()"
+
+$MYSQL_PASSWORD = (kubectl exec -n investment-fund deployment/authentication-database -- printenv MYSQL_ROOT_PASSWORD).Trim()
+kubectl exec -n investment-fund deployment/authentication-database -- mysql -uroot "-p$MYSQL_PASSWORD" -e "USE authentication; DELETE FROM user WHERE role != 'director';"
+
+
+5. GRADER BEZ BLOCKCHAINA
+
+cd PUTANJA_DO\iep_testovi
+.\.venv\Scripts\Activate.ps1
+
+pytest -q --type all `
+  --authentication-url http://127.0.0.1:5000 `
+  --jwt-secret development-secret-key-at-least-32-characters `
+  --roles-field role `
+  --employee-role employee `
+  --director-role director `
+  --with-authentication `
+  --employee-url http://127.0.0.1:5001 `
+  --director-url http://127.0.0.1:5002 `
+  --grade-report-file grade_report_no_blockchain.json
+
+Bez --with-blockchain i --provider-url - grader sam prepoznaje no-blockchain
+granu i salje {uuid, approved} umesto {uuid, voters}.
+
+Maksimum u ovom modu:
+- authentication: 49
+- level0: 27
+- level1: 26  (jedan poen vise nego u blockchain modu - dodatni content-check
+               test koji postoji samo ovde)
+- level2: 29
+- level3: 49
+- TOTAL: 180
+- 98 testova
+
+Ocekivani rezultat:
+180/180
+98 passed
+
+
+6. POVRATAK NA BLOCKCHAIN VERZIJU
+
+kubectl apply -f .\kubernetes\director.yaml -n investment-fund
+kubectl rollout status deployment/director-service -n investment-fund --timeout=120s
+kubectl get pods -n investment-fund
+
+Provera da je stari (blockchain) kod ponovo aktivan:
+
+kubectl exec -n investment-fund deployment/director-service -- ls /app/solidity/output
+
+Mora da postoje Voting.abi i Voting.bin.
+
+Ako pre ovoga menjas grader run, ocisti baze ponovo (isti koraci kao u tacki 4)
+pre nego sto pokrenes pytest sa --with-blockchain --provider-url http://127.0.0.1:8545.
+
+
+7. VAZNO
+
+- Ne mesati kubectl apply -f .\kubernetes\ (sve odjednom) sa ovim rucnim
+  prebacivanjem - .\kubernetes\no-blockchain\ je namerno IZVAN glavnog foldera
+  da ga bulk apply ne pokupi slucajno.
+- ganache pod (blockchain deployment) moze mirno da ostane da radi neiskoriscen
+  dok je director-service na no-blockchain image-u - ne mora da se gasi.
+- Grader sam bira format /decision tela na osnovu prisustva --with-blockchain
+  flaga - ne treba nista drugo menjati u komandi osim tog jednog flaga i
+  --provider-url.
+- Ako /decision vraca 500 posle prebacivanja, prvo:
+  kubectl logs -n investment-fund deployment/director-service --tail=100

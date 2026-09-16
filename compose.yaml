@@ -93,7 +93,20 @@ services:
       - order-storage
       - blockchain
 
-
+#  public-service:
+#    build:
+#      context: .
+#      dockerfile: public/Dockerfile
+#    container_name: public-service
+#    environment:
+#      MONGO_URI: mongodb://investment-database:27017/
+#      MONGO_DATABASE: investment
+#      REDIS_HOST: order-storage
+#      REDIS_PORT: 6379
+#    ports:
+#      - "5003:5003"
+#    depends_on:
+#      - investment-database
 
 volumes:
   authentication-database-data:

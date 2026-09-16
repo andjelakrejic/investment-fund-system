@@ -1,17 +1,10 @@
 from pathlib import Path
+import json
 
-from solcx import (
-    compile_standard,
-    get_installed_solc_versions,
-    install_solc
-)
 from web3 import Web3
 
 
-SOLC_VERSION = "0.8.20"
-
-
-def get_web3(blockchain_url):
+def get_web3(blockchain_url): # pravi se Web3 objekat koji predstavlja vezu izmedju Python apl i Ethereum blockchaina - Ganache
     web3 = Web3(
         Web3.HTTPProvider(blockchain_url)
     )
@@ -23,62 +16,38 @@ def get_web3(blockchain_url):
 
     return web3
 
-
-def compile_voting_contract():
-    installed_versions = {
-        str(version)
-        for version in get_installed_solc_versions()
-    }
-
-    if SOLC_VERSION not in installed_versions:
-        install_solc(SOLC_VERSION)
-
+def load_voting_contract(): # Ucitavaju se Voting.abi (interfejs ugovora) i Voting.bin (kompajliran bajtkod ugovora)
     project_root = Path(__file__).resolve().parent.parent
-    contract_path = project_root / "contracts" / "Voting.sol"
 
-    contract_source = contract_path.read_text(
+    abi_path = (
+        project_root
+        / "solidity"
+        / "output"
+        / "Voting.abi"
+    )
+
+    bytecode_path = (
+        project_root
+        / "solidity"
+        / "output"
+        / "Voting.bin"
+    )
+
+    with abi_path.open("r", encoding="utf-8") as file:
+        abi = json.load(file)
+
+    bytecode = bytecode_path.read_text(
         encoding="utf-8"
-    )
-
-    compiled_contract = compile_standard(
-        {
-            "language": "Solidity",
-            "sources": {
-                "Voting.sol": {
-                    "content": contract_source
-                }
-            },
-            "settings": {
-                "evmVersion": "paris",
-                "outputSelection": {
-                    "*": {
-                        "*": [
-                            "abi",
-                            "evm.bytecode.object"
-                        ]
-                    }
-                }
-            }
-        },
-        solc_version=SOLC_VERSION
-    )
-
-    voting_contract = compiled_contract[
-        "contracts"
-    ]["Voting.sol"]["Voting"]
-
-    abi = voting_contract["abi"]
-    bytecode = voting_contract[
-        "evm"
-    ]["bytecode"]["object"]
+    ).strip()
 
     return abi, bytecode
 
-def deploy_voting_contract(blockchain_url, voters):
-    web3 = get_web3(blockchain_url)
-    abi, bytecode = compile_voting_contract()
 
-    deployer_account = web3.eth.accounts[0]
+def deploy_voting_contract(blockchain_url, voters): #
+    web3 = get_web3(blockchain_url)
+    abi, bytecode = load_voting_contract()
+
+    deployer_account = web3.eth.accounts[0] # prvi nalog iz Ganache ce deploy-ovati contract
 
     voting_contract = web3.eth.contract(
         abi=abi,
@@ -91,12 +60,12 @@ def deploy_voting_contract(blockchain_url, voters):
         "from": deployer_account
     })
 
-    transaction_receipt = web3.eth.wait_for_transaction_receipt(
+    transaction_receipt = web3.eth.wait_for_transaction_receipt( # ceka se da Ganache obradi transakciju i vrati receipt
         transaction_hash
     )
 
     deployed_contract = web3.eth.contract(
-        address=transaction_receipt.contractAddress,
+        address=transaction_receipt.contractAddress, # adresa novog smart contracta
         abi=abi
     )
 
@@ -107,6 +76,7 @@ def deploy_voting_contract(blockchain_url, voters):
         "deployment_receipt": dict(transaction_receipt)
     }
 
+
 def build_vote_transactions(
     blockchain_url,
     contract_address,
@@ -114,7 +84,7 @@ def build_vote_transactions(
 ):
     web3 = get_web3(blockchain_url)
 
-    contract = web3.eth.contract(
+    contract = web3.eth.contract( # contract kreiran u deploy_voting_contract na contract_address
         address=Web3.to_checksum_address(contract_address),
         abi=abi
     )
@@ -144,10 +114,9 @@ def build_vote_transactions(
     })
 
     return (
-        serialize_transaction(approve_transaction),
-        serialize_transaction(reject_transaction)
+        serialize_transaction(approve_transaction), # vote(True)
+        serialize_transaction(reject_transaction)   # vote(False)
     )
-
 
 def serialize_transaction(transaction):
     result = {}
@@ -159,6 +128,7 @@ def serialize_transaction(transaction):
             result[key] = value
 
     return result
+
 
 def get_voting_result(
     blockchain_url,

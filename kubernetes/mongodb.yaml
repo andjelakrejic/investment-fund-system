@@ -29,7 +29,6 @@ spec:
       containers:
         - name: investment-database
           image: mongo:8
-          imagePullPolicy: Never
           ports:
             - containerPort: 27017
 

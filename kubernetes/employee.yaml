@@ -16,8 +16,7 @@ spec:
       containers:
         - name: employee-service
           image: projekat-employee-service:latest
-          imagePullPolicy: Never
-
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5001
 
@@ -91,4 +90,3 @@ spec:
     - protocol: TCP
       port: 5001
       targetPort: 5001
-  type: NodePort

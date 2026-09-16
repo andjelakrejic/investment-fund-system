@@ -16,8 +16,7 @@ spec:
       containers:
         - name: director-service
           image: projekat-director-service:latest
-          imagePullPolicy: Never
-
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5002
 
@@ -97,4 +96,3 @@ spec:
     - protocol: TCP
       port: 5002
       targetPort: 5002
-  type: NodePort

@@ -16,8 +16,7 @@ spec:
       containers:
         - name: authentication-service
           image: projekat-authentication-service:latest
-          imagePullPolicy: Never
-
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5000
 
@@ -61,4 +60,3 @@ spec:
     - protocol: TCP
       port: 5000
       targetPort: 5000
-  type: NodePort

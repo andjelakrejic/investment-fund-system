@@ -10,6 +10,8 @@ from employee.routes.employee import employee_blueprint
 app = Flask(__name__)
 app.config.from_object(Configuration)
 
+# Pravi konekciju ka Redis i Mongodb i inicijalizuje JWT
+
 jwt = JWTManager(app)
 
 app.register_blueprint(employee_blueprint)
@@ -24,7 +26,6 @@ redis_client = Redis(
     port=app.config["REDIS_PORT"],
     decode_responses=True
 )
-
 
 @app.route("/")
 def index():
