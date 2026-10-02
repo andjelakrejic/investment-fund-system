@@ -22,8 +22,6 @@ redis_client = Redis(
     port=app.config["REDIS_PORT"],
     decode_responses=True
 )
-
-
 @app.route("/")
 def index():
     redis_client.ping()

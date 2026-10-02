@@ -1,6 +1,23 @@
-.venv/
-.idea/
+# Python / IDE
 __pycache__/
 *.pyc
+.venv/
+venv/
+.idea/
+.vscode/
+
+# Not part of the project
+public/
+iep_grader/
+
+# Personal notes
+bez_blockchain.txt
+IEP_pokretanje_i_odbrana.txt
+modif.txt
+novi_kont.txt
+pokretanje.txt
+zdt
 .env
-*.db
+
+.env
+zdt

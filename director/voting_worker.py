@@ -52,7 +52,7 @@ def process_finished_votings(
     mongo_database = mongo_client[mongo_database_name]
     assets = mongo_database["assets"]
 
-    while True:
+    while True: # ceka rezultat glasanja da bude finished
         try:
             voting_keys = redis_client.keys("voting:*")
 

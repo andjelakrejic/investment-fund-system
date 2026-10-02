@@ -94,7 +94,7 @@ def pending_orders(): # director trazi buy/sell zahteve iz redisa (pending)
     methods=["GET"]
 )
 @director_required
-def report():
+def report(): # za svaku kategoriju racuna koliko je potroseno i koliko je zaradjeno
     assets = get_assets_collection()
 
     pipeline = [
@@ -827,7 +827,7 @@ def status_distribution():
                         "then": "profit",
                         "else": {
                             "$cond": {
-                                "if": {"$eq", ["$buying_price", "$selling_price"]},
+                                "if": {"$eq": ["$buying_price", "$selling_price"]},
                                 "then": "zero",
                                 "else": {
                                     "$cond": {
@@ -843,7 +843,7 @@ def status_distribution():
             }
         },
         {
-            "group": {
+            "$group": {
                 "_id": "$status",
                 "count": {"$sum": 1 }
             }
