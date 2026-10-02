@@ -23,9 +23,6 @@ to an employee vote run by an Ethereum smart contract.
 | `director`       | Reviewing pending orders, approving or rejecting them, deploying voting contracts, category reports. |
 | `solidity/`, `contracts/` | Voting smart contract. Only whitelisted voters can vote, each only once, and a strict majority decides. |
 
-`director-no-blockchain` is a variant of the director service in which approval
-happens immediately, without voting.
-
 ## API Overview
 
 **Authentication**

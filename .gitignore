@@ -21,3 +21,6 @@ zdt
 
 .env
 zdt
+director-no-blockchain/
+kubernetes/no-blockchain/
+*.tar
